@@ -1,0 +1,213 @@
+---
+title: "Example Mapping for C&M Workshop"
+author: "Andy Wilson"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 1
+    toc_float: true
+    
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+install.packages("devtools")
+devtools::install_github("PublicHealthEngland/fingertipsR")
+
+library(fingertipsR)
+library(tidyverse)
+library(leaflet)
+library(readxl)
+library(rgeos)
+library(rgdal)
+library(maptools)
+library(sp)
+library(openxlsx)
+```
+
+
+```{r LA Level Prep, include=FALSE}
+## Local Authority Data
+master_data<- fingertips_data(IndicatorID = 93378, AreaTypeID = 401)
+map_ind_data<-master_data%>%
+  filter(ParentName == "North West region",
+         Timeperiod == '2020/21')
+
+## Local Authority Shape File
+geojson_url <- "https://opendata.arcgis.com/datasets/ae90afc385c04d869bc8cf8890bd1bcd_4.geojson"
+file_path <- "regions.geojson"
+download.file(geojson_url, file_path)
+
+lads <- geojsonio::geojson_read(
+  x = file_path,  # the same file_path as above
+  what = "sp"  # returns the read with spatial class
+)
+
+###Filter shapes for North West only
+NW_LTLA<-read_excel("NW_LTLA_Mapping.xlsx")
+lads_nw<-merge(lads,NW_LTLA, by.x = "lad17cd", "areaCode")
+lads_nw<-subset(lads_nw, Region == "North West")
+
+## Joining LA Shape Data and Fingertips Data
+lads_data<-merge(lads, map_ind_data, by.x = "lad17cd", "AreaCode")
+lads_data_nw<-merge(lads_nw, map_ind_data, by.x = "lad17cd", "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+
+## Creating Palettes
+
+pal_bin<-colorBin("Greens", lads_data$Value, bins = 4)
+pal_con<-colorNumeric("Greens", lads_data$Value)
+
+
+```
+
+```{r LSOA Prep, include = FALSE}
+
+## Load Deprivation Data
+imd<-read.xlsx("https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/833970/File_1_-_IMD2019_Index_of_Multiple_Deprivation.xlsx", sheet = 2)
+
+imd<-imd%>%
+  left_join(NW_LTLA, c("Local.Authority.District.code.(2019)" = "areaCode"))%>%
+  mutate(`Index.of.Multiple.Deprivation.(IMD).Decile` = factor(`Index.of.Multiple.Deprivation.(IMD).Decile`))
+
+## Read Shape File
+
+lsoa<- geojsonio::geojson_read(
+  x = "Lower_Layer_Super_Output_Areas_(December_2011)_Boundaries_Super_Generalised_Clipped_(BSC)_EW_V3.geojson",  # the same file_path as above
+  what = "sp"  # returns the read with spatial class
+)
+
+## Join Shape files with data
+
+lsoa_data<-merge(lsoa, imd, by.x = "LSOA11CD", "LSOA.code.(2011)")
+
+### Filter for North West
+lsoa_data_nw<-subset(lsoa_data, Region == "North West")
+
+## Create palette
+pal_fac_imd<-colorFactor(palette = "Blues", levels = 10:1, domain = lsoa_data_nw$`Index.of.Multiple.Deprivation.(IMD).Decile`)
+
+
+
+```
+
+
+# Introduction
+This document has been created to provide an overview of some of the plotting options that are available for creating maps to show the Health Inequality metrics for the Cheshire & Merseyside workshop. All of these maps have been created with open source software and tools.
+
+# Local Authority Maps - Education Level 8 Attainment Rate {.tabset .tabset-fate}
+The charts in this section have been created to show the average Attainment 8 scores of students at the end of Key Stage Level 4. The latest data available is for the 2020/21 school year.
+
+## Binned Colour Chloropleths - Include North West
+The map below includes data for all North West Local Authorities for context with each authority filled by the attaintment score group.
+
+```{r LA Chloro Bins Colour}
+
+
+lat<-53.8
+lng<--2.5
+
+leaflet(lads_data_nw)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_bin(Value),
+              label = paste0(lads_data_nw$lad17nm,": ", lads_data_nw$Value," - (", round(lads_data_nw$LowerCI95.0limit,1)," - ",round(lads_data_nw$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_nw$Value, pal = pal_bin, title = "Attainment Score",position = "topright")%>%
+  setView(lng, lat, zoom = 8)
+
+```
+
+## Continuous Colour Chloropleth - Cheshire & Merseyside only
+```{r LA Chloro Cont Colour - CM Only}
+
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+lat<-53.3
+lng<--2.7
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", lads_data_cm$Value," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Attainment Score",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+## Continuous Colour Cholorpleth - C&M Only - Grey Map
+```{r LA Chloro Cont Colour - CM Only - Grey Map}
+
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+lat<-53.3
+lng<--2.7
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", lads_data_cm$Value," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Positron)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Attainment Score",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+```
+
+# LSOA Level Datasets {.tabset .tabset-fade}
+Some of the data to be presented at the workshop will be available at Local Super Output Area (LSOA). LSOAs are much smaller geographic areas with an LSOA having an average population of 1,500 people. The maps in this section show examples of LSOA maps for IMD deciles.
+
+
+## LSOA Chloropleth - All North West
+The map below shows the IMD decile of each LSOA in the North West of England for additional context. The darker the colour the LSOA is filled by the more deprived the area, the lighter the more affluent.
+```{r LSOA Chloropleth - All North West}
+
+lat<-53.8
+lng<--2.5
+
+leaflet(lsoa_data_nw)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_fac_imd(`Index.of.Multiple.Deprivation.(IMD).Decile`),
+              label = paste0(lsoa_data_nw$LSOA11NM,": Decile - ", lsoa_data_nw$`Index.of.Multiple.Deprivation.(IMD).Decile`))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_nw$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac_imd, title = "IMD Decile - 2019",position = "topright")%>%
+  setView(lng, lat, zoom = 8)
+
+```
+## LSOA Chloropleth for C&M only
+This map is limited to the LSOAs in Cheshire & Merseyside only.
+
+```{r LSOA Chloropleth - C&M Only}
+
+lat<-53.3
+lng<--2.5
+
+lsoa_data_cm<-subset(lsoa_data_nw, System == "Cheshire & Merseyside")
+
+leaflet(lsoa_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_fac(`Index.of.Multiple.Deprivation.(IMD).Decile`),
+              label = paste0(lsoa_data_cm$LSOA11NM,": Decile - ", lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac, title = "IMD Decile - 2019",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+
+```
+
+## LSOA Chloropleth - Cheshire & Merseyside only with LA borders
+```{r LSOA Chloropleth - C&M with LA borders}
+
+lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
+
+leaflet(lsoa_data_cm)%>%
+  addPolygons(data = lads_cm, color = "black", weight = 2)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "grey", fillColor = ~pal_fac(`Index.of.Multiple.Deprivation.(IMD).Decile`),
+              label = paste0(lsoa_data_cm$LSOA11NM,": Decile - ", lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac, title = "IMD Decile - 2019",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+```
+
