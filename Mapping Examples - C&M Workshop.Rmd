@@ -187,10 +187,10 @@ lsoa_data_cm<-subset(lsoa_data_nw, System == "Cheshire & Merseyside")
 
 leaflet(lsoa_data_cm)%>%
   addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
-              color = "black", fillColor = ~pal_fac(`Index.of.Multiple.Deprivation.(IMD).Decile`),
+              color = "black", fillColor = ~pal_fac_imd(`Index.of.Multiple.Deprivation.(IMD).Decile`),
               label = paste0(lsoa_data_cm$LSOA11NM,": Decile - ", lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`))%>%
   addProviderTiles(providers$CartoDB.Voyager)%>%
-  addLegend(values = lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac, title = "IMD Decile - 2019",position = "topright")%>%
+  addLegend(values = lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac_imd, title = "IMD Decile - 2019",position = "topright")%>%
   setView(lng, lat, zoom = 9)
 
 
@@ -204,10 +204,10 @@ lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
 leaflet(lsoa_data_cm)%>%
   addPolygons(data = lads_cm, color = "black", weight = 2)%>%
   addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
-              color = "grey", fillColor = ~pal_fac(`Index.of.Multiple.Deprivation.(IMD).Decile`),
+              color = "grey", fillColor = ~pal_fac_imd(`Index.of.Multiple.Deprivation.(IMD).Decile`),
               label = paste0(lsoa_data_cm$LSOA11NM,": Decile - ", lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`))%>%
   addProviderTiles(providers$CartoDB.Voyager)%>%
-  addLegend(values = lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac, title = "IMD Decile - 2019",position = "topright")%>%
+  addLegend(values = lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac_imd, title = "IMD Decile - 2019",position = "topright")%>%
   setView(lng, lat, zoom = 9)
 ```
 
