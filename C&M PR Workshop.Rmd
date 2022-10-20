@@ -113,7 +113,7 @@ pop_cm<-pop%>%
                                          "80", "81", "82", "83", "84", "85", "86", "87", "88", "89",
                                          "90+") ~ "60+",
                               TRUE ~ "Under 60"))%>%
-  group_by(LSOA.Code, LSOA.Name, `LA.Code.(2018.boundaries)`, `LA.name.(2018.boundaries)`, `LA.Code.(2021.boundaries)`, `LA.name.(2021.boundaries)`, AgeGroup)%>%
+  group_by(LSOA.Code, LSOA.Name, `LA.Code.(2018.boundaries)`, `LA.name.(2018.boundaries)`, `LA.Code.(2021.boundaries)`, `LA.name.(2021.boundaries)`, Region, System ,AgeGroup)%>%
   summarise(Pop = sum(Pop, na.rm =TRUE))%>%
   spread(AgeGroup, Pop)%>%
   mutate(Pop_60 = round((`60+`/(`60+` + `Under 60`))*100,2))
@@ -123,7 +123,8 @@ pop_cm<-pop%>%
 lsoa_data<-merge(lsoa, pop_cm, by.x = "LSOA11CD", "LSOA.Code")
 
 ### Filter for North West
-lsoa_data_nw<-lsoa_data
+lsoa_data_nw<-subset(lsoa_data, Region == "North West")
+
 
 ## Create palette
 pal_con_a60<-colorNumeric("Greens", lsoa_data_nw$Pop_60)
@@ -136,7 +137,7 @@ pal_con_a60<-colorNumeric("Greens", lsoa_data_nw$Pop_60)
 lat<-53.3
 lng<--2.5
 
-lsoa_data_cm<-lsoa_data_nw
+lsoa_data_cm<-subset(lsoa_data, System == "Cheshire & Merseyside")
 
 lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
 leaflet(lsoa_data_cm)%>%
@@ -166,3 +167,5 @@ leaflet(lsoa_data_cm)%>%
 # Alcohol Use
 
 # Smoking
+
+## Active Smokers
