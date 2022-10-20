@@ -1,0 +1,168 @@
+---
+title: "C&M PR Workshop"
+author: "PAT North West  - NHS England"
+date: "2022-10-20"
+output:
+  html_document:
+    toc: true
+    toc_depth: 1
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#install.packages("devtools")
+#devtools::install_github("PublicHealthEngland/fingertipsR")
+library(fingertipsR)
+library(tidyverse)
+library(leaflet)
+library(readxl)
+library(rgeos)
+library(rgdal)
+library(maptools)
+library(sp)
+library(openxlsx)
+
+
+## Local Authority Shape File
+geojson_url <- "https://opendata.arcgis.com/datasets/ae90afc385c04d869bc8cf8890bd1bcd_4.geojson"
+file_path <- "regions.geojson"
+download.file(geojson_url, file_path)
+lads <- geojsonio::geojson_read(
+  x = file_path,  # the same file_path as above
+  what = "sp"  # returns the read with spatial class
+)
+
+###Filter shapes for North West only
+NW_LTLA<-read_excel("NW_LTLA_Mapping.xlsx")
+lads_nw<-merge(lads,NW_LTLA, by.x = "lad17cd", "areaCode")
+lads_nw<-subset(lads_nw, Region == "North West")
+
+## LSOA Shape file
+lsoa<- geojsonio::geojson_read(
+  x = "Lower_Layer_Super_Output_Areas_(December_2011)_Boundaries_Super_Generalised_Clipped_(BSC)_EW_V3.geojson",  # the same file_path as above
+  what = "sp"  # returns the read with spatial class
+)
+
+
+
+```
+
+
+# Introduction
+
+# Deprivation
+
+```{r Dep prep}
+
+## Load Deprivation Data
+imd<-read.xlsx("https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/833970/File_1_-_IMD2019_Index_of_Multiple_Deprivation.xlsx", sheet = 2)
+imd<-imd%>%
+  left_join(NW_LTLA, c("Local.Authority.District.code.(2019)" = "areaCode"))%>%
+  mutate(`Index.of.Multiple.Deprivation.(IMD).Decile` = factor(`Index.of.Multiple.Deprivation.(IMD).Decile`))
+
+## Join Shape files with data
+lsoa_data<-merge(lsoa, imd, by.x = "LSOA11CD", "LSOA.code.(2011)")
+
+### Filter for North West
+lsoa_data_nw<-subset(lsoa_data, Region == "North West")
+
+## Create palette
+pal_fac_imd<-colorFactor(palette = "Blues", levels = 10:1, domain = lsoa_data_nw$`Index.of.Multiple.Deprivation.(IMD).Decile`)
+
+```
+
+```{r Dep Map}
+
+
+lat<-53.3
+lng<--2.5
+
+lsoa_data_cm<-subset(lsoa_data_nw, System == "Cheshire & Merseyside")
+
+lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
+leaflet(lsoa_data_cm)%>%
+  addPolygons(data = lads_cm, color = "black", weight = 2)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "grey", fillColor = ~pal_fac_imd(`Index.of.Multiple.Deprivation.(IMD).Decile`),
+              label = paste0(lsoa_data_cm$LSOA11NM,": Decile - ", lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac_imd, title = "IMD Decile - 2019",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+
+# Population Age Demographics
+
+## Over 60s
+
+```{r Pop 60 prep}
+
+## Prep Age data
+pop<-read.xlsx("https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates/mid2020sape23dt2/sape23dt2mid2020lsoasyoaestimatesunformatted.xlsx", sheet = 4, startRow = 5)
+
+pop_cm<-pop%>%
+  left_join(NW_LTLA, by = c("LA.Code.(2021.boundaries)" = "areaCode"))%>%
+  filter(System == "Cheshire & Merseyside")%>%
+  gather(Age, Pop, -c(1:7,99:103))%>%
+  mutate(AgeGroup = case_when(Age %in% c("60", "61", "62", "63", "64", "65", "66", "67", "68", "69",
+                                         "70", "71", "72", "73", "74", "75", "76", "77", "78", "79",
+                                         "80", "81", "82", "83", "84", "85", "86", "87", "88", "89",
+                                         "90+") ~ "60+",
+                              TRUE ~ "Under 60"))%>%
+  group_by(LSOA.Code, LSOA.Name, `LA.Code.(2018.boundaries)`, `LA.name.(2018.boundaries)`, `LA.Code.(2021.boundaries)`, `LA.name.(2021.boundaries)`, AgeGroup)%>%
+  summarise(Pop = sum(Pop, na.rm =TRUE))%>%
+  spread(AgeGroup, Pop)%>%
+  mutate(Pop_60 = round((`60+`/(`60+` + `Under 60`))*100,2))
+
+
+## Join Shape files with data
+lsoa_data<-merge(lsoa, pop_cm, by.x = "LSOA11CD", "LSOA.Code")
+
+### Filter for North West
+lsoa_data_nw<-lsoa_data
+
+## Create palette
+pal_con_a60<-colorNumeric("Greens", lsoa_data_nw$Pop_60)
+
+```
+
+```{r Pop 60 Map}
+
+
+lat<-53.3
+lng<--2.5
+
+lsoa_data_cm<-lsoa_data_nw
+
+lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
+leaflet(lsoa_data_cm)%>%
+  addPolygons(data = lads_cm, color = "black", weight = 2)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "grey", fillColor = ~pal_con_a60(Pop_60),
+              label = paste0(lsoa_data_cm$LSOA11NM,": Population 60+ - ", lsoa_data_cm$Pop_60))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_cm$Pop_60, pal = pal_con_a60, title = "Population60+ 2020",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+
+# Population Ethnicity Demographics
+
+# Employment Status
+
+# Education Status
+
+# Car Ownership
+
+# Co-morbidity Prevalance
+
+# Drug Use
+
+# Alcohol Use
+
+# Smoking
