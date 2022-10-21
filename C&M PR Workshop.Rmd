@@ -47,6 +47,13 @@ lsoa<- geojsonio::geojson_read(
 )
 
 
+## CCG Shape File
+
+ccg<-geojsonio::geojson_read(
+  x = "Clinical_Commissioning_Groups_(April_2021)_EN_BSC.geojson",  # the same file_path as above
+  what = "sp"  # returns the read with spatial class
+)
+
 
 ```
 
@@ -169,3 +176,50 @@ leaflet(lsoa_data_cm)%>%
 # Smoking
 
 ## Active Smokers
+
+```{r Active Smoke Prep}
+
+## Read Data
+smk_act_data<- fingertips_data(IndicatorID = 90452, AreaTypeID = 167)
+map_ind_data<-smk_act_data%>%
+  filter(AreaCode %in% c("E38000015","E38000217","E38000091","E38000143","E38000014","E38000101",
+                         "E38000080","E38000068","E38000050","E38000205","E38000135","E38000227",
+                         "E38000024","E38000172","E38000182","E38000161","E38000194","E38000174",
+                         "E38000200","E38000034","E38000016","E38000208","E38000228","E38000233",
+                         "E38000226","E38000170","E38000187"),
+         Timeperiod == '2021')
+
+
+###Filter shapes for North West only
+NW_CCG<-read_excel("NW_CCG.xlsx")
+ccg_nw<-merge(ccg, NW_CCG, by.x = "CCG21CD", "Area Code")
+ccg_nw<-subset(ccg_nw, Region == "North West")
+
+## Joining LA Shape Data and Fingertips Data
+ccg_data_nw<-merge(ccg_nw, map_ind_data, by.x = "CCG21CD", "AreaCode")
+ccg_data_nw<-subset(ccg_data_nw, Region == "North West")
+
+## Create palette
+pal_con_asmk<-colorNumeric("Oranges", ccg_data_nw$Value)
+
+```
+
+```{r Active Smoke Map}
+
+
+lat<-53.3
+lng<--2.5
+
+ccg_data_cm<-subset(ccg_data_nw, System == "Cheshire & Merseyside")
+
+
+leaflet(ccg_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con_asmk(Value),
+              label = paste0(ccg_data_cm$CCG21NM,": ", round(ccg_data_cm$Value,1)," - (", round(ccg_data_cm$LowerCI99.8limit,1)," - ",round(ccg_data_cm$UpperCI99.8limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = ccg_data_cm$Value, pal = pal_con_asmk, title = "Active Smoking (%)",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
