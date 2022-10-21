@@ -57,7 +57,6 @@ ccg<-geojsonio::geojson_read(
 
 ```
 
-
 # Introduction
 
 # Deprivation
@@ -100,7 +99,6 @@ leaflet(lsoa_data_cm)%>%
   setView(lng, lat, zoom = 9)
 
 ```
-
 
 # Population Age Demographics
 
@@ -158,12 +156,145 @@ leaflet(lsoa_data_cm)%>%
 
 ```
 
-
 # Population Ethnicity Demographics
 
 # Employment Status
 
+## People in Employment {.tabset .tabset-fade}
+
+### Map
+
+```{r In Emp Prep}
+
+## Prep Employment data
+emp<-fingertips_data(IndicatorID = 92313, AreaTypeID = 401)
+map_ind_data_emp<-emp%>%
+  filter(ParentName == "North West region",
+         Timeperiod == '2020/21',
+         Sex == "Persons",
+         Age == "16-64 yrs")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_emp, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_nw$Value)
+
+```
+
+```{r In Emp Map}
+
+lat<-53.3
+lng<--2.5
+
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", lads_data_cm$Value," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Percentage in Empoyment",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+
+```
+
+### Metadata
+
+## Sickness Absence {.tabset .tabset-fade}
+
+### Map
+
+```{r Emp Sick Prep}
+
+## Prep Sickness data
+emp_sick<-fingertips_data(IndicatorID = 90287, AreaTypeID = 401)
+map_ind_data_sick<-emp_sick%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2018 - 20",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_sick, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_nw$Value)
+
+```
+
+```{r Emp Sick Map}
+
+lat<-53.3
+lng<--2.5
+
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Percentage Working Days Lost",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+### Metadata
+
+## Gap in Employment Rate {.tabet .tabset-fade}
+
+### Map
+```{r Emp Gap Prep}
+
+## Prep Sickness data
+emp_gap<-fingertips_data(IndicatorID = 90282, AreaTypeID = 401)
+map_ind_data_gap<-emp_gap%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2020/21",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_gap, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_nw$Value)
+
+```
+
+```{r Emp Gap Map}
+
+lat<-53.3
+lng<--2.5
+
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Employment Rate Gap",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+
+
 # Education Status
+
+## Level 8 Attaintment {.tabset .tabset-fade}
+
+
+## Pupil Absence {.tabset .tabset-fade}
+
+
+
 
 # Car Ownership
 
@@ -175,7 +306,7 @@ leaflet(lsoa_data_cm)%>%
 
 # Smoking
 
-## Active Smokers
+## Active Smokers {.tabset .tabset-fade}
 
 ```{r Active Smoke Prep}
 
@@ -204,6 +335,8 @@ pal_con_asmk<-colorNumeric("Oranges", ccg_data_nw$Value)
 
 ```
 
+### CCG Map
+
 ```{r Active Smoke Map}
 
 
@@ -223,3 +356,4 @@ leaflet(ccg_data_cm)%>%
 
 ```
 
+### Metadata
