@@ -27,22 +27,19 @@ library(openxlsx)
 
 
 ## Local Authority Shape File
-geojson_url <- "https://opendata.arcgis.com/datasets/ae90afc385c04d869bc8cf8890bd1bcd_4.geojson"
-file_path <- "regions.geojson"
-download.file(geojson_url, file_path)
 lads <- geojsonio::geojson_read(
-  x = file_path,  # the same file_path as above
+  x = "geo/regions.geojson",  # the same file_path as above
   what = "sp"  # returns the read with spatial class
 )
 
 ###Filter shapes for North West only
-NW_LTLA<-read_excel("NW_LTLA_Mapping.xlsx")
+NW_LTLA<-read_excel("ref/NW_LTLA_Mapping.xlsx")
 lads_nw<-merge(lads,NW_LTLA, by.x = "lad17cd", "areaCode")
 lads_nw<-subset(lads_nw, Region == "North West")
 
 ## LSOA Shape file
 lsoa<- geojsonio::geojson_read(
-  x = "Lower_Layer_Super_Output_Areas_(December_2011)_Boundaries_Super_Generalised_Clipped_(BSC)_EW_V3.geojson",  # the same file_path as above
+  x = "geo/Lower_Layer_Super_Output_Areas_(December_2011)_Boundaries_Super_Generalised_Clipped_(BSC)_EW_V3.geojson",  # the same file_path as above
   what = "sp"  # returns the read with spatial class
 )
 
@@ -50,7 +47,7 @@ lsoa<- geojsonio::geojson_read(
 ## CCG Shape File
 
 ccg<-geojsonio::geojson_read(
-  x = "Clinical_Commissioning_Groups_(April_2021)_EN_BSC.geojson",  # the same file_path as above
+  x = "geo/Clinical_Commissioning_Groups_(April_2021)_EN_BSC.geojson",  # the same file_path as above
   what = "sp"  # returns the read with spatial class
 )
 
@@ -322,7 +319,7 @@ map_ind_data<-smk_act_data%>%
 
 
 ###Filter shapes for North West only
-NW_CCG<-read_excel("NW_CCG.xlsx")
+NW_CCG<-read_excel("ref/NW_CCG.xlsx")
 ccg_nw<-merge(ccg, NW_CCG, by.x = "CCG21CD", "Area Code")
 ccg_nw<-subset(ccg_nw, Region == "North West")
 

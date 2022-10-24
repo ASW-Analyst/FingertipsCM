@@ -38,12 +38,8 @@ map_ind_data<-master_data%>%
 
 # Download ShapeFile ------------------------------------------------------
 
-geojson_url <- "https://opendata.arcgis.com/datasets/ae90afc385c04d869bc8cf8890bd1bcd_4.geojson"
-file_path <- "regions.geojson"
-download.file(geojson_url, file_path)
-
 lads <- geojsonio::geojson_read(
-  x = file_path,  # the same file_path as above
+  x = "geo/region.geojson",  # the same file_path as above
   what = "sp"  # returns the read with spatial class
 )
 
