@@ -1,0 +1,359 @@
+---
+title: "C&M PR Workshop"
+author: "PAT North West  - NHS England"
+date: "2022-10-20"
+output:
+  html_document:
+    toc: true
+    toc_depth: 1
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+#install.packages("devtools")
+#devtools::install_github("PublicHealthEngland/fingertipsR")
+library(fingertipsR)
+library(tidyverse)
+library(leaflet)
+library(readxl)
+library(rgeos)
+library(rgdal)
+library(maptools)
+library(sp)
+library(openxlsx)
+
+
+## Local Authority Shape File
+geojson_url <- "https://opendata.arcgis.com/datasets/ae90afc385c04d869bc8cf8890bd1bcd_4.geojson"
+file_path <- "regions.geojson"
+download.file(geojson_url, file_path)
+lads <- geojsonio::geojson_read(
+  x = file_path,  # the same file_path as above
+  what = "sp"  # returns the read with spatial class
+)
+
+###Filter shapes for North West only
+NW_LTLA<-read_excel("NW_LTLA_Mapping.xlsx")
+lads_nw<-merge(lads,NW_LTLA, by.x = "lad17cd", "areaCode")
+lads_nw<-subset(lads_nw, Region == "North West")
+
+## LSOA Shape file
+lsoa<- geojsonio::geojson_read(
+  x = "Lower_Layer_Super_Output_Areas_(December_2011)_Boundaries_Super_Generalised_Clipped_(BSC)_EW_V3.geojson",  # the same file_path as above
+  what = "sp"  # returns the read with spatial class
+)
+
+
+## CCG Shape File
+
+ccg<-geojsonio::geojson_read(
+  x = "Clinical_Commissioning_Groups_(April_2021)_EN_BSC.geojson",  # the same file_path as above
+  what = "sp"  # returns the read with spatial class
+)
+
+
+```
+
+# Introduction
+
+# Deprivation
+
+```{r Dep prep}
+
+## Load Deprivation Data
+imd<-read.xlsx("https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/833970/File_1_-_IMD2019_Index_of_Multiple_Deprivation.xlsx", sheet = 2)
+imd<-imd%>%
+  left_join(NW_LTLA, c("Local.Authority.District.code.(2019)" = "areaCode"))%>%
+  mutate(`Index.of.Multiple.Deprivation.(IMD).Decile` = factor(`Index.of.Multiple.Deprivation.(IMD).Decile`))
+
+## Join Shape files with data
+lsoa_data<-merge(lsoa, imd, by.x = "LSOA11CD", "LSOA.code.(2011)")
+
+### Filter for North West
+lsoa_data_nw<-subset(lsoa_data, Region == "North West")
+
+## Create palette
+pal_fac_imd<-colorFactor(palette = "Blues", levels = 10:1, domain = lsoa_data_nw$`Index.of.Multiple.Deprivation.(IMD).Decile`)
+
+```
+
+```{r Dep Map}
+
+
+lat<-53.3
+lng<--2.5
+
+lsoa_data_cm<-subset(lsoa_data_nw, System == "Cheshire & Merseyside")
+
+lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
+leaflet(lsoa_data_cm)%>%
+  addPolygons(data = lads_cm, color = "black", weight = 2)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "grey", fillColor = ~pal_fac_imd(`Index.of.Multiple.Deprivation.(IMD).Decile`),
+              label = paste0(lsoa_data_cm$LSOA11NM,": Decile - ", lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_cm$`Index.of.Multiple.Deprivation.(IMD).Decile`, pal = pal_fac_imd, title = "IMD Decile - 2019",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+# Population Age Demographics
+
+## Over 60s
+
+```{r Pop 60 prep}
+
+## Prep Age data
+pop<-read.xlsx("https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates/mid2020sape23dt2/sape23dt2mid2020lsoasyoaestimatesunformatted.xlsx", sheet = 4, startRow = 5)
+
+pop_cm<-pop%>%
+  left_join(NW_LTLA, by = c("LA.Code.(2021.boundaries)" = "areaCode"))%>%
+  filter(System == "Cheshire & Merseyside")%>%
+  gather(Age, Pop, -c(1:7,99:103))%>%
+  mutate(AgeGroup = case_when(Age %in% c("60", "61", "62", "63", "64", "65", "66", "67", "68", "69",
+                                         "70", "71", "72", "73", "74", "75", "76", "77", "78", "79",
+                                         "80", "81", "82", "83", "84", "85", "86", "87", "88", "89",
+                                         "90+") ~ "60+",
+                              TRUE ~ "Under 60"))%>%
+  group_by(LSOA.Code, LSOA.Name, `LA.Code.(2018.boundaries)`, `LA.name.(2018.boundaries)`, `LA.Code.(2021.boundaries)`, `LA.name.(2021.boundaries)`, Region, System ,AgeGroup)%>%
+  summarise(Pop = sum(Pop, na.rm =TRUE))%>%
+  spread(AgeGroup, Pop)%>%
+  mutate(Pop_60 = round((`60+`/(`60+` + `Under 60`))*100,2))
+
+
+## Join Shape files with data
+lsoa_data<-merge(lsoa, pop_cm, by.x = "LSOA11CD", "LSOA.Code")
+
+### Filter for North West
+lsoa_data_nw<-subset(lsoa_data, Region == "North West")
+
+
+## Create palette
+pal_con_a60<-colorNumeric("Greens", lsoa_data_nw$Pop_60)
+
+```
+
+```{r Pop 60 Map}
+
+
+lat<-53.3
+lng<--2.5
+
+lsoa_data_cm<-subset(lsoa_data, System == "Cheshire & Merseyside")
+
+lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
+leaflet(lsoa_data_cm)%>%
+  addPolygons(data = lads_cm, color = "black", weight = 2)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "grey", fillColor = ~pal_con_a60(Pop_60),
+              label = paste0(lsoa_data_cm$LSOA11NM,": Population 60+ - ", lsoa_data_cm$Pop_60))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_cm$Pop_60, pal = pal_con_a60, title = "Population60+ 2020",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+# Population Ethnicity Demographics
+
+# Employment Status
+
+## People in Employment {.tabset .tabset-fade}
+
+### Map
+
+```{r In Emp Prep}
+
+## Prep Employment data
+emp<-fingertips_data(IndicatorID = 92313, AreaTypeID = 401)
+map_ind_data_emp<-emp%>%
+  filter(ParentName == "North West region",
+         Timeperiod == '2020/21',
+         Sex == "Persons",
+         Age == "16-64 yrs")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_emp, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_nw$Value)
+
+```
+
+```{r In Emp Map}
+
+lat<-53.3
+lng<--2.5
+
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", lads_data_cm$Value," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Percentage in Empoyment",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+
+```
+
+### Metadata
+
+## Sickness Absence {.tabset .tabset-fade}
+
+### Map
+
+```{r Emp Sick Prep}
+
+## Prep Sickness data
+emp_sick<-fingertips_data(IndicatorID = 90287, AreaTypeID = 401)
+map_ind_data_sick<-emp_sick%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2018 - 20",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_sick, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_nw$Value)
+
+```
+
+```{r Emp Sick Map}
+
+lat<-53.3
+lng<--2.5
+
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Percentage Working Days Lost",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+### Metadata
+
+## Gap in Employment Rate {.tabet .tabset-fade}
+
+### Map
+```{r Emp Gap Prep}
+
+## Prep Sickness data
+emp_gap<-fingertips_data(IndicatorID = 90282, AreaTypeID = 401)
+map_ind_data_gap<-emp_gap%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2020/21",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_gap, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_nw$Value)
+
+```
+
+```{r Emp Gap Map}
+
+lat<-53.3
+lng<--2.5
+
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Employment Rate Gap",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+
+
+# Education Status
+
+## Level 8 Attaintment {.tabset .tabset-fade}
+
+
+## Pupil Absence {.tabset .tabset-fade}
+
+
+
+
+# Car Ownership
+
+# Co-morbidity Prevalance
+
+# Drug Use
+
+# Alcohol Use
+
+# Smoking
+
+## Active Smokers {.tabset .tabset-fade}
+
+```{r Active Smoke Prep}
+
+## Read Data
+smk_act_data<- fingertips_data(IndicatorID = 90452, AreaTypeID = 167)
+map_ind_data<-smk_act_data%>%
+  filter(AreaCode %in% c("E38000015","E38000217","E38000091","E38000143","E38000014","E38000101",
+                         "E38000080","E38000068","E38000050","E38000205","E38000135","E38000227",
+                         "E38000024","E38000172","E38000182","E38000161","E38000194","E38000174",
+                         "E38000200","E38000034","E38000016","E38000208","E38000228","E38000233",
+                         "E38000226","E38000170","E38000187"),
+         Timeperiod == '2021')
+
+
+###Filter shapes for North West only
+NW_CCG<-read_excel("NW_CCG.xlsx")
+ccg_nw<-merge(ccg, NW_CCG, by.x = "CCG21CD", "Area Code")
+ccg_nw<-subset(ccg_nw, Region == "North West")
+
+## Joining LA Shape Data and Fingertips Data
+ccg_data_nw<-merge(ccg_nw, map_ind_data, by.x = "CCG21CD", "AreaCode")
+ccg_data_nw<-subset(ccg_data_nw, Region == "North West")
+
+## Create palette
+pal_con_asmk<-colorNumeric("Oranges", ccg_data_nw$Value)
+
+```
+
+### CCG Map
+
+```{r Active Smoke Map}
+
+
+lat<-53.3
+lng<--2.5
+
+ccg_data_cm<-subset(ccg_data_nw, System == "Cheshire & Merseyside")
+
+
+leaflet(ccg_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con_asmk(Value),
+              label = paste0(ccg_data_cm$CCG21NM,": ", round(ccg_data_cm$Value,1)," - (", round(ccg_data_cm$LowerCI99.8limit,1)," - ",round(ccg_data_cm$UpperCI99.8limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = ccg_data_cm$Value, pal = pal_con_asmk, title = "Active Smoking (%)",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+### Metadata
