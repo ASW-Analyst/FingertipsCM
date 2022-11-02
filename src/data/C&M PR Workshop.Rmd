@@ -1,11 +1,12 @@
 ---
-title: "C&M PR Workshop"
+title: "Cheshire & Merseyside PR Workshop - Analysis Pack"
 author: "PAT North West  - NHS England"
 date: "2022-10-20"
 output:
   html_document:
+    theme: cerulean
     toc: true
-    toc_depth: 1
+    toc_depth: 2
     toc_float: true
 ---
 
@@ -24,7 +25,7 @@ library(rgdal)
 library(maptools)
 library(sp)
 library(openxlsx)
-
+library(plotly)
 
 ## Local Authority Shape File
 lads <- geojsonio::geojson_read(
@@ -55,6 +56,9 @@ ccg<-geojsonio::geojson_read(
 ```
 
 # Introduction
+This pack has been produced to provide an overview of key health and socio-economic statistics on the population of people living across Cheshire & Merseyside ICB. All the data contained in the pack is publicly available with each section below contianing a _Metadata_ tab documenting where the data has been sourced from.
+
+<br/>
 
 # Deprivation
 
@@ -107,7 +111,11 @@ leaflet(lsoa_data_cm)%>%
 
 The data for this map is sourced from the 2019 Indices of Deprivation published by the **Ministry of Housing, Communities and Local Government**. The data can be found [here](https://www.gov.uk/government/statistics/english-indices-of-deprivation-2019).
 
+<br/>
+
 # Population Age Demographics
+
+<br/>
 
 ## Over 60s {.tabset .tabset-fade}
 
@@ -143,7 +151,7 @@ lsoa_data_nw<-subset(lsoa_data, Region == "North West")
 
 
 ## Create palette
-pal_con_a60<-colorNumeric("Greens", lsoa_data_nw$Pop_60)
+pal_con_a60<-colorNumeric("Oranges", lsoa_data_nw$Pop_60)
 
 ```
 
@@ -167,14 +175,11 @@ leaflet(lsoa_data_cm)%>%
 
 ```
 
-### Metadata
-
-The data for the map was sourced from the ONS mid-year population estimates for 2020 at LSOA level. The data used and more information on how these estimates are constructed can be found [here](https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates).
 
 
 ### Local Authority Population Pyramids
 
-```{r pop pyramid}
+```{r pop pyramid prep}
 
 pop_m<-read.xlsx("https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates/mid2020sape23dt2/sape23dt2mid2020lsoasyoaestimatesunformatted.xlsx", sheet = 5, startRow = 5)
 
@@ -206,14 +211,118 @@ pop_cm_t<-pop_t%>%
                                          
 pop_cm_p<-pop_cm_t%>%
    group_by(`LA.Code.(2018.boundaries)`, `LA.name.(2018.boundaries)`, `LA.Code.(2021.boundaries)`, `LA.name.(2021.boundaries)`, Region, System, AgeGroup, Sex)%>%
-  summarise(Pop = sum(Pop, na.rm =TRUE))
+  summarise(Pop = sum(Pop, na.rm =TRUE))%>%
+  mutate(LA = `LA.name.(2021.boundaries)`)%>%
+  mutate(Pop2 = case_when(Sex == "Male" ~ -Pop,
+                          TRUE ~ Pop))
   
+
+```
+
+```{r pop pyramid chart}
+
+##pop_cm_p%>%
+  ##plot_ly(x= ~Pop, y = ~AgeGroup, color = ~Sex)%>%
+  ##add_bars(orientation = 'h', hoverinfo = 'text', text = ~Pop)
+
+
+button_list_master <- list(
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Cheshire East"),
+    label = "Cheshire East"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Cheshire West and Chester"), 
+    label = "Cheshire West and Chester"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Halton"), 
+    label = "Halton"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Knowsley"), 
+    label = "Knowsley"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Liverpool"), 
+    label = "Liverpool"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Sefton"), 
+    label = "Sefton"
+  ),
+    list(
+    method = "restyle",
+    args = list("transforms[0].value", "St. Helens"), 
+    label = "St. Helens"
+  ),
+    list(
+    method = "restyle",
+    args = list("transforms[0].value", "Warrington"), 
+    label = "Warrington"
+  ),
+    list(
+    method = "restyle",
+    args = list("transforms[0].value", "Wirral"), 
+    label = "Wirral"
+  ))
+
+pop_cm_p%>% 
+  plot_ly(x = ~`Pop2`, y = ~`AgeGroup`, customdata = pop_cm_p$LA, color = ~Sex, 
+          type = 'bar', 
+          hoverinfo = 'text', text = ~paste(`AgeGroup`, '</br></br>', 
+                                            scales::comma(`Pop`, accuracy=1)),
+          transforms = list(
+            list(
+              type = "filter", 
+              target = 'customdata', ##Set the target variable in an attribute above 
+              value = ~`LA`))) %>% 
+  layout(updatemenus = list(
+    list(type = 'dropdown',
+         active = 0, 
+         buttons = button_list_master,
+         x = 0.2,
+         y = 1.4,
+         xanchor = "center")),
+    title = list(text= "Population Pyramid", y = 0.9),
+    xaxis = list(title=list(text='Population')),
+    yaxis = list(title = list(text= "Age Group", font = list(size = 12), y = 1.2), 
+                 tickformat = ",d"), 
+    legend = list(orientation = "h", 
+                  x = 0.5, y = 1.1,
+                  xanchor = "center"),
+    barmode = "overlay")%>%
+  config(modeBarButtonsToRemove = c("zoomIn2d", "zoomOut2d", "select2d", "lasso2d", "toImage",
+                                    "pan2d", "autoScale2d", "resetScale2d", "zoom2d", "hoverClosestCartesian"))
 
 
 ```
 
+### Metadata
+
+The data for the map was sourced from the ONS mid-year population estimates for 2020 at LSOA level. The data used and more information on how these estimates are constructed can be found [here](https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates).
+
+<br/>
 
 # Population Ethnicity Demographics
+
+## Percentage of Population BAME {.tabset .tabset-fade}
+
+**Awaiting Census Data Publication 29th November**
+
+### LSOA Map
+
+<br/>
+
+### Metadata
+
+<br/>
 
 # Employment Status
 
@@ -261,11 +370,15 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/public-health-outcomes-framework/data#page/3/gid/1000041/pat/6/par/E12000002/ati/401/are/E06000049/iid/92313/age/204/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1).
 
 The underlying source of the data is taken from the annual Labour Force Survey.
+
+<br/>
 
 ## Sickness Absence {.tabset .tabset-fade}
 
@@ -310,6 +423,8 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/public-health-outcomes-framework/data#page/3/gid/1000041/pat/6/par/E12000002/ati/401/are/E06000049/iid/90287/age/164/sex/4/cat/-1/ctp/-1/yrr/3/cid/4/tbm/1/page-options/car-do-0).
@@ -320,7 +435,9 @@ The underlying source of the data is taken from the annual Labour Force Survey a
 -   Decreased sickness absence due to furloughing, social distancing, shielding and increased homeworking which has reduced other causes of absence. Some of the decrease seen in 2020 will be because there were fewer people in work due to furlough.
 -   Survey weighting methodology for the sample has changed slightly due to face-to-face interviewing being suspended.
 
-## Gap in Employment Rate {.tabet .tabset-fade}
+<br/>
+
+## Gap in Employment Rate {.tabset .tabset-fade}
 
 ### Map
 
@@ -363,11 +480,15 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/public-health-outcomes-framework/data#page/6/gid/1000041/pat/6/par/E12000002/ati/401/are/E06000049/iid/90282/age/204/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
 
 Numerator for employment rate of people with a long term condition: Estimated (weighted) number of people with any physical or mental health condition or illness lasting or expected to last 12 months or more (based on responses in the Annual Population Survey) and who are in employment either as an employee, self employed, in government employment and training programmes or an unpaid family worker (the ILO definition of basic economic activity) and are of working age (aged 16 to 64).
+
+<br/>
 
 # Education Status
 
@@ -393,7 +514,7 @@ lads_data_nw<-subset(lads_data_nw, Region == "North West")
 lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
 
 ## Creating Palettes
-pal_con<-colorNumeric("Purples", lads_data_cm$Value)
+pal_con<-colorNumeric("Reds", lads_data_cm$Value)
 
 ```
 
@@ -414,9 +535,13 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Wider Determinants of Health profile produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/wider-determinants/data#page/3/gid/1938133071/pat/6/par/E12000002/ati/401/are/E07000026/iid/93378/age/175/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
+
+<br/>
 
 ## Pupil Absence {.tabset .tabset-fade}
 
@@ -440,7 +565,7 @@ lads_data_nw<-subset(lads_data_nw, Region == "North West")
 lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
 
 ## Creating Palettes
-pal_con<-colorNumeric("Purples", lads_data_cm$Value)
+pal_con<-colorNumeric("Reds", lads_data_cm$Value)
 
 ```
 
@@ -461,15 +586,71 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Wider Determinants of Health profile produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/wider-determinants/data#page/3/gid/1938133071/pat/6/par/E12000002/ati/401/are/E07000026/iid/10301/age/193/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
 
 The underlying source of the data is from Pupil absence statistics published by the **Department for Education**.
 
+<br/>
+
 # Car Ownership
 
+**Awaiting Census Data Publication 29th November**
+
+## Car and Van Ownership - Census 2021 {.tabset .tabset-fade}
+
+### Local Authority
+
+<br/>
+
+### Metadata
+
+<br/>
+
+
 # Co-morbidity Prevalance
+
+## Condition Prevalence {.tabset .tabset-fade}
+
+### Atrial Fibrillation
+
+<br/>
+
+### Coronary Heart Disease
+
+<br/>
+
+### Heart Failure
+
+<br/>
+
+### Hypertension
+
+<br/>
+
+### Peripheral Arterial Disease
+
+<br/>
+
+### Stroke & TIA
+
+<br/>
+
+### Obesity
+
+<br/>
+
+### Depression
+
+<br/>
+
+### Metadata
+
+<br/>
+
 
 # Drug Use
 
@@ -495,7 +676,7 @@ lads_data_nw<-subset(lads_data_nw, Region == "North West")
 lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
 
 ## Creating Palettes
-pal_con<-colorNumeric("Greens", lads_data_cm$Value)
+pal_con<-colorNumeric("Purples", lads_data_cm$Value)
 
 ```
 
@@ -516,11 +697,15 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/opiates#page/3/gid/1/pat/6/par/E12000002/ati/402/are/E06000008/iid/93517/age/182/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
 
 The numerator estimates are taken from the **National Drug Treatment Monitoring System** and the estimates of the underlying denominator are taken from estimates of OCU Use in England, produced by **Liverpool John Moores University (LJMU)**.
+
+<br/>
 
 ## Deaths from Drug Misuse {.tabset .tabset-fade}
 
@@ -544,7 +729,7 @@ lads_data_nw<-subset(lads_data_nw, Region == "North West")
 lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
 
 ## Creating Palettes
-pal_con<-colorNumeric("Greens", lads_data_cm$Value)
+pal_con<-colorNumeric("Purples", lads_data_cm$Value)
 
 ```
 
@@ -565,29 +750,33 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/drug%20death#page/3/gid/1/pat/6/par/E12000002/ati/401/are/E07000026/iid/92432/age/1/sex/4/cat/-1/ctp/-1/yrr/3/cid/4/tbm/1/page-options/car-do-0).
 
 Deaths where the underlying cause of death has been coded to the following categories of mental and behavioural disorders due to psychoactive substance use (excluding alcohol, tobacco and volatile solvents):
 
-1. opioids (F11)
-2. cannabinoids (F12)
-3. sedatives or hypnotics (F13)
-4. cocaine (F14)
-5. other stimulants, including caffeine (F15)
-6. hallucinogens (F16) and
-7. multiple drug use and use of other psychoactive substances (F19)
+1.  opioids (F11)
+2.  cannabinoids (F12)
+3.  sedatives or hypnotics (F13)
+4.  cocaine (F14)
+5.  other stimulants, including caffeine (F15)
+6.  hallucinogens (F16) and
+7.  multiple drug use and use of other psychoactive substances (F19)
 
 **AND**
 
 Deaths coded to the following categories and where a drug controlled under the Misuse of Drugs Act 1971 was mentioned on the death record:
 
-1. Accidental poisoning by drugs, medicaments and biological substances (X40--X44)
-2. Intentional self-poisoning by drugs, medicaments and biological substances (X60--X64)
-3. Poisoning by drugs, medicaments and biological substances, undetermined intent (Y10--Y14)
-4. Assault by drugs, medicaments and biological substances (X85) and
-5. Mental and behavioural disorders due to use of volatile solvents (F18)
+1.  Accidental poisoning by drugs, medicaments and biological substances (X40--X44)
+2.  Intentional self-poisoning by drugs, medicaments and biological substances (X60--X64)
+3.  Poisoning by drugs, medicaments and biological substances, undetermined intent (Y10--Y14)
+4.  Assault by drugs, medicaments and biological substances (X85) and
+5.  Mental and behavioural disorders due to use of volatile solvents (F18)
+
+<br/>
 
 # Alcohol Use
 
@@ -634,11 +823,15 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/alcohol#page/3/gid/1/pat/6/par/E12000002/ati/401/are/E07000026/iid/92906/age/1/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
 
 Admissions data is sourced from Hospital Episode Statistics (HES) via **NHS Digital** and population estimates via **ONS**.
+
+<br/>
 
 ## Alcohol Licensed Premises {.tabset .tabset-fade}
 
@@ -683,11 +876,15 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/alcohol#page/3/gid/1/pat/6/par/E12000002/ati/401/are/E07000026/iid/92772/age/-1/sex/-1/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
 
 The original source of the data is **Public Health England: Risk Factors Intelligence (RFI) team** (from published data from the Home Office).
+
+<br/>
 
 ## Alcohol Specific Mortality {.tabset .tabset-fade}
 
@@ -732,9 +929,13 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
 
 The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/alcohol%20mortality#page/3/gid/1938132832/pat/6/par/E12000002/ati/401/are/E07000026/iid/91380/age/1/sex/4/cat/-1/ctp/-1/yrr/3/cid/4/tbm/1/page-options/car-do-0).
+
+<br/>
 
 # Smoking
 
@@ -763,11 +964,12 @@ ccg_data_nw<-merge(ccg_nw, map_ind_data, by.x = "CCG21CD", "AreaCode")
 ccg_data_nw<-subset(ccg_data_nw, Region == "North West")
 
 ## Create palette
-pal_con_asmk<-colorNumeric("Oranges", ccg_data_nw$Value)
+pal_con_asmk<-colorNumeric("Reds", ccg_data_nw$Value)
 
 ```
 
 ### CCG Map
+The map below shows percentage of active smokers as identified on the GP Survey in 2021. The percentage of over 16s who are active smokers are shown on the map alongside the corresponding 95% confidence intervals. The darker the colour the higher the percentage of the population actively smoke.
 
 ```{r Active Smoke Map}
 
