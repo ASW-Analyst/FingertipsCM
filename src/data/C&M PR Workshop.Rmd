@@ -52,6 +52,7 @@ ccg<-geojsonio::geojson_read(
   what = "sp"  # returns the read with spatial class
 )
 
+NW_CCG<-read_excel("ref/NW_CCG.xlsx")
 
 ```
 
@@ -312,17 +313,70 @@ The data for the map was sourced from the ONS mid-year population estimates for 
 
 # Population Ethnicity Demographics
 
-## Percentage of Population BAME {.tabset .tabset-fade}
+## Percentage of Population belonging to an Ethnic Minority {.tabset .tabset-fade}
 
-**Awaiting Census Data Publication 29th November**
+The map below shows the percentage of residents of each LSOA across Cheshire & Merseyside who identified as belonging to an Ethnic minority group via the 2021 Census. The darker the colour, the higher the percentage identifying as an Ethnic minority in that area.
 
 ### LSOA Map
 
 <br/>
 
+```{r Pop Eth Prep}
+
+##Prep Eth Data
+lsoa_lk<-imd%>%
+  select(c(1:4))
+
+eth<-read.csv("TS021-2021-1-filtered-2022-12-23T11_00_31Z.csv")
+
+eth<-eth%>%
+  left_join(lsoa_lk, by = c("Lower.Layer.Super.Output.Areas.Code" = "LSOA.code.(2011)"))
+
+eth<-eth%>%
+  left_join(NW_LTLA, by = c("Local.Authority.District.code.(2019)" = "areaCode"))
+
+eth<-eth%>%
+  filter(Region == "North West")%>%
+  select(c(-4))%>%
+  spread(key = 3, value = Observation)
+
+eth<-eth%>%
+  mutate("Pop" = rowSums(.[11:30]))%>%
+  mutate("Eth_M" = round((1-(`13`/Pop))*100,2))
+
+## Joining LSOA Shape Data and Ethnicity Data
+lsoa_data_nw<-merge(lsoa, eth, by.x = "LSOA11CD", "Lower.Layer.Super.Output.Areas.Code")
+lsoa_data_nw<-subset(lsoa_data_nw, Region == "North West")
+lsoa_data_cm<-subset(lsoa_data_nw, System == "Cheshire & Merseyside")
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lsoa_data_cm$Eth_M)
+
+```
+
+```{r Eth Map}
+
+lat<-53.3
+lng<--2.5
+
+
+lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
+leaflet(lsoa_data_cm)%>%
+  addPolygons(data = lads_cm, color = "black", weight = 2)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "grey", fillColor = ~pal_con(lsoa_data_cm$Eth_M),
+              label = paste0(lsoa_data_cm$LSOA11NM,": ",lsoa_data_cm$Eth_M,"%"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_cm$Eth_M, pal = pal_con, title = "Population belonging to an Ethnic Minority",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+
 ### Metadata
 
-<br/>
+The data to produce this map was sourced from the results of the 2021 Census made available by the **Office for National Statistics**. The data can be accessed [here](https://www.ons.gov.uk/datasets/TS021/editions/2021/versions/1/filter-outputs/643a67b0-8b68-4ff5-9ba0-32dc3219d84a#get-data).
+
+
 
 # Employment Status
 
@@ -614,8 +668,52 @@ The underlying source of the data is from Pupil absence statistics published by 
 # Co-morbidity Prevalance
 
 ## Condition Prevalence {.tabset .tabset-fade}
+The maps below show the prevalence of different conditions as recorded on GP systems for each CCG across Cheshire & Merseyside. The darker the colour the higher the prevalence of the condition across that CCG footprint.
 
 ### Atrial Fibrillation
+
+```{r Prev AF Prep}
+
+ccg_nw<-merge(ccg, NW_CCG, by.x = "CCG21CD", "Area Code")
+ccg_cm<-subset(ccg_nw, System == "Cheshire & Merseyside")
+
+## Load Co-Morbidity Data
+
+atrial_fib<-read.xlsx("https://files.digital.nhs.uk/D9/13B97D/qof-2122-sicbl-ach-prev-pca.xlsx", 
+                sheet = 2, startRow = 12)
+atrial_fib<-atrial_fib%>%
+  select(1:3, 9:11)%>%
+  filter(Sub.ICB.Loc.ONS.code %in% c("E38000015","E38000217","E38000091","E38000143","E38000014","E38000101",
+                               "E38000080","E38000068","E38000050","E38000205","E38000135","E38000227",
+                               "E38000024","E38000172","E38000182","E38000161","E38000194","E38000174",
+                               "E38000200","E38000034","E38000016","E38000208","E38000228","E38000233",
+                               "E38000226","E38000170","E38000187")) 
+AF<-rename(atrial_fib, Prevalence = "Prevalence.(%)")
+
+## Joining Shape Data and QOF Data
+ccg_data_cm<-merge(ccg_cm, AF, by.x = "CCG21CD",  "Sub.ICB.Loc.ONS.code")
+
+
+## Creating Palettes
+
+pal_con<-colorNumeric("Blues", ccg_data_cm$`Prevalence`)
+
+```
+
+```{r Prev AF }
+
+lat<-53.3
+lng<--2.5
+
+leaflet(ccg_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Prevalence),
+              label = paste0(ccg_data_cm$CCG21NM,": ", round(ccg_data_cm$Prevalence, 2), "%"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = ccg_data_cm$Prevalence, pal = pal_con, title = "Prevalence of Atrial Fibrillation (%)",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
 
 <br/>
 
@@ -649,7 +747,7 @@ The underlying source of the data is from Pupil absence statistics published by 
 
 ### Metadata
 
-<br/>
+The data to produce these maps was sourced from QOF 2021/22 publication by **NHS Digital**. The data can be accessed [here](https://digital.nhs.uk/data-and-information/publications/statistical/quality-and-outcomes-framework-achievement-prevalence-and-exceptions-data/2021-22).
 
 
 # Drug Use
