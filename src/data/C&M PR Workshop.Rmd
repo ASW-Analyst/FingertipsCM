@@ -1,11 +1,12 @@
 ---
-title: "C&M PR Workshop"
+title: "Cheshire & Merseyside PR Workshop - Analysis Pack"
 author: "PAT North West  - NHS England"
 date: "2022-10-20"
 output:
   html_document:
+    theme: cerulean
     toc: true
-    toc_depth: 1
+    toc_depth: 2
     toc_float: true
 ---
 
@@ -24,7 +25,7 @@ library(rgdal)
 library(maptools)
 library(sp)
 library(openxlsx)
-
+library(plotly)
 
 ## Local Authority Shape File
 lads <- geojsonio::geojson_read(
@@ -51,12 +52,22 @@ ccg<-geojsonio::geojson_read(
   what = "sp"  # returns the read with spatial class
 )
 
+NW_CCG<-read_excel("ref/NW_CCG.xlsx")
 
 ```
 
 # Introduction
+This pack has been produced to provide an overview of key health and socio-economic statistics on the population of people living across Cheshire & Merseyside ICB. All the data contained in the pack is publicly available with each section below contianing a _Metadata_ tab documenting where the data has been sourced from.
+
+<br/>
 
 # Deprivation
+
+## Indices of Deprivation (IMD) 2019 {.tabset .tabset-fade}
+
+### LSOA Map
+
+The map below shows the decile each LSOA falls into based on their deprivation score. The higher the decile, the more affluent the area, the lower the decile, the more derpived.
 
 ```{r Dep prep}
 
@@ -97,9 +108,21 @@ leaflet(lsoa_data_cm)%>%
 
 ```
 
+### Metadata
+
+The data for this map is sourced from the 2019 Indices of Deprivation published by the **Ministry of Housing, Communities and Local Government**. The data can be found [here](https://www.gov.uk/government/statistics/english-indices-of-deprivation-2019).
+
+<br/>
+
 # Population Age Demographics
 
-## Over 60s
+<br/>
+
+## Over 60s {.tabset .tabset-fade}
+
+### LSOA Map
+
+The map below shows the percentage of the resident population in each LSOA across Cheshire & Merseyside that are aged 60 years or more as of the **mid-2020** population estimates from the ONS. The darker the colour, the higher the proportion of the population who are aged 60 or over.
 
 ```{r Pop 60 prep}
 
@@ -129,7 +152,7 @@ lsoa_data_nw<-subset(lsoa_data, Region == "North West")
 
 
 ## Create palette
-pal_con_a60<-colorNumeric("Greens", lsoa_data_nw$Pop_60)
+pal_con_a60<-colorNumeric("Oranges", lsoa_data_nw$Pop_60)
 
 ```
 
@@ -148,18 +171,220 @@ leaflet(lsoa_data_cm)%>%
               color = "grey", fillColor = ~pal_con_a60(Pop_60),
               label = paste0(lsoa_data_cm$LSOA11NM,": Population 60+ - ", lsoa_data_cm$Pop_60))%>%
   addProviderTiles(providers$CartoDB.Voyager)%>%
-  addLegend(values = lsoa_data_cm$Pop_60, pal = pal_con_a60, title = "Population60+ 2020",position = "topright")%>%
+  addLegend(values = lsoa_data_cm$Pop_60, pal = pal_con_a60, title = "Population 60+ %",position = "topright")%>%
   setView(lng, lat, zoom = 9)
 
 ```
 
+
+
+### Local Authority Population Pyramids
+
+```{r pop pyramid prep}
+
+pop_m<-read.xlsx("https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates/mid2020sape23dt2/sape23dt2mid2020lsoasyoaestimatesunformatted.xlsx", sheet = 5, startRow = 5)
+
+pop_m<-pop_m%>%
+  mutate(Sex = "Male")
+
+pop_f<-read.xlsx("https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates/mid2020sape23dt2/sape23dt2mid2020lsoasyoaestimatesunformatted.xlsx", sheet = 6, startRow = 5)
+
+pop_f<-pop_f%>%
+  mutate(Sex = "Female")
+
+pop_t<-rbind(pop_m, pop_f)
+
+pop_cm_t<-pop_t%>%
+  left_join(NW_LTLA, by = c("LA.Code.(2021.boundaries)" = "areaCode"))%>%
+  filter(System == "Cheshire & Merseyside")%>%
+  gather(Age, Pop, -c(1:7,99:104))%>%
+  mutate(AgeGroup = case_when(Age %in% c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9") ~ "00-09",
+                              Age %in% c("10", "11", "12", "13", "14", "15", "16", "17", "18", "19") ~ "10-19",
+                              Age %in% c("20", "21", "22", "23", "24", "25", "26", "27", "28", "29") ~ "20-29",
+                              Age %in% c("30", "31", "32", "33", "34", "35", "36", "37", "38", "39") ~ "30-39",
+                              Age %in% c("40", "41", "42", "43", "44", "45", "46", "47", "48", "49") ~ "40-49",
+                              Age %in% c("50", "51", "52", "53", "54", "55", "56", "57", "58", "59") ~ "50-59",
+                              Age %in% c("60", "61", "62", "63", "64", "65", "66", "67", "68", "69") ~ "60-69",
+                              Age %in% c("70", "71", "72", "73", "74", "75", "76", "77", "78", "79") ~ "70-79",
+                              Age %in% c("80", "81", "82", "83", "84", "85", "86", "87", "88", "89") ~ "80-89",
+                              TRUE ~ "90+"))
+                                         
+                                         
+pop_cm_p<-pop_cm_t%>%
+   group_by(`LA.Code.(2018.boundaries)`, `LA.name.(2018.boundaries)`, `LA.Code.(2021.boundaries)`, `LA.name.(2021.boundaries)`, Region, System, AgeGroup, Sex)%>%
+  summarise(Pop = sum(Pop, na.rm =TRUE))%>%
+  mutate(LA = `LA.name.(2021.boundaries)`)%>%
+  mutate(Pop2 = case_when(Sex == "Male" ~ -Pop,
+                          TRUE ~ Pop))
+  
+
+```
+
+```{r pop pyramid chart}
+
+##pop_cm_p%>%
+  ##plot_ly(x= ~Pop, y = ~AgeGroup, color = ~Sex)%>%
+  ##add_bars(orientation = 'h', hoverinfo = 'text', text = ~Pop)
+
+
+button_list_master <- list(
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Cheshire East"),
+    label = "Cheshire East"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Cheshire West and Chester"), 
+    label = "Cheshire West and Chester"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Halton"), 
+    label = "Halton"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Knowsley"), 
+    label = "Knowsley"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Liverpool"), 
+    label = "Liverpool"
+  ),
+  list(
+    method = "restyle",
+    args = list("transforms[0].value", "Sefton"), 
+    label = "Sefton"
+  ),
+    list(
+    method = "restyle",
+    args = list("transforms[0].value", "St. Helens"), 
+    label = "St. Helens"
+  ),
+    list(
+    method = "restyle",
+    args = list("transforms[0].value", "Warrington"), 
+    label = "Warrington"
+  ),
+    list(
+    method = "restyle",
+    args = list("transforms[0].value", "Wirral"), 
+    label = "Wirral"
+  ))
+
+pop_cm_p%>% 
+  plot_ly(x = ~`Pop2`, y = ~`AgeGroup`, customdata = pop_cm_p$LA, color = ~Sex, 
+          type = 'bar', 
+          hoverinfo = 'text', text = ~paste(`AgeGroup`, '</br></br>', 
+                                            scales::comma(`Pop`, accuracy=1)),
+          transforms = list(
+            list(
+              type = "filter", 
+              target = 'customdata', ##Set the target variable in an attribute above 
+              value = ~`LA`))) %>% 
+  layout(updatemenus = list(
+    list(type = 'dropdown',
+         active = 0, 
+         buttons = button_list_master,
+         x = 0.2,
+         y = 1.4,
+         xanchor = "center")),
+    title = list(text= "Population Pyramid", y = 0.9),
+    xaxis = list(title=list(text='Population')),
+    yaxis = list(title = list(text= "Age Group", font = list(size = 12), y = 1.2), 
+                 tickformat = ",d"), 
+    legend = list(orientation = "h", 
+                  x = 0.5, y = 1.1,
+                  xanchor = "center"),
+    barmode = "overlay")%>%
+  config(modeBarButtonsToRemove = c("zoomIn2d", "zoomOut2d", "select2d", "lasso2d", "toImage",
+                                    "pan2d", "autoScale2d", "resetScale2d", "zoom2d", "hoverClosestCartesian"))
+
+
+```
+
+### Metadata
+
+The data for the map was sourced from the ONS mid-year population estimates for 2020 at LSOA level. The data used and more information on how these estimates are constructed can be found [here](https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates).
+
+<br/>
+
 # Population Ethnicity Demographics
+
+## Percentage of Population belonging to an Ethnic Minority {.tabset .tabset-fade}
+
+The map below shows the percentage of residents of each LSOA across Cheshire & Merseyside who identified as belonging to an Ethnic minority group via the 2021 Census. The darker the colour, the higher the percentage identifying as an Ethnic minority in that area.
+
+### LSOA Map
+
+<br/>
+
+```{r Pop Eth Prep}
+
+##Prep Eth Data
+lsoa_lk<-imd%>%
+  select(c(1:4))
+
+eth<-read.csv("TS021-2021-1-filtered-2022-12-23T11_00_31Z.csv")
+
+eth<-eth%>%
+  left_join(lsoa_lk, by = c("Lower.Layer.Super.Output.Areas.Code" = "LSOA.code.(2011)"))
+
+eth<-eth%>%
+  left_join(NW_LTLA, by = c("Local.Authority.District.code.(2019)" = "areaCode"))
+
+eth<-eth%>%
+  filter(Region == "North West")%>%
+  select(c(-4))%>%
+  spread(key = 3, value = Observation)
+
+eth<-eth%>%
+  mutate("Pop" = rowSums(.[11:30]))%>%
+  mutate("Eth_M" = round((1-(`13`/Pop))*100,2))
+
+## Joining LSOA Shape Data and Ethnicity Data
+lsoa_data_nw<-merge(lsoa, eth, by.x = "LSOA11CD", "Lower.Layer.Super.Output.Areas.Code")
+lsoa_data_nw<-subset(lsoa_data_nw, Region == "North West")
+lsoa_data_cm<-subset(lsoa_data_nw, System == "Cheshire & Merseyside")
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lsoa_data_cm$Eth_M)
+
+```
+
+```{r Eth Map}
+
+lat<-53.3
+lng<--2.5
+
+
+lads_cm<-subset(lads_nw, System == "Cheshire & Merseyside")
+leaflet(lsoa_data_cm)%>%
+  addPolygons(data = lads_cm, color = "black", weight = 2)%>%
+  addPolygons(stroke = TRUE, weight = 0.4, opacity = 1, fillOpacity = 0.6,
+              color = "grey", fillColor = ~pal_con(lsoa_data_cm$Eth_M),
+              label = paste0(lsoa_data_cm$LSOA11NM,": ",lsoa_data_cm$Eth_M,"%"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lsoa_data_cm$Eth_M, pal = pal_con, title = "Population belonging to an Ethnic Minority",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+
+### Metadata
+
+The data to produce this map was sourced from the results of the 2021 Census made available by the **Office for National Statistics**. The data can be accessed [here](https://www.ons.gov.uk/datasets/TS021/editions/2021/versions/1/filter-outputs/643a67b0-8b68-4ff5-9ba0-32dc3219d84a#get-data).
+
+
 
 # Employment Status
 
 ## People in Employment {.tabset .tabset-fade}
 
-### Map
+### Local Authority Map
+
+The map below shows the percentage of residents of each Local Authority across Cheshire & Merseyside aged between 16 and 64 years old who are in employment. The darker the colour, the higher the employment rate.
 
 ```{r In Emp Prep}
 
@@ -199,11 +424,21 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
+
 ### Metadata
+
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/public-health-outcomes-framework/data#page/3/gid/1000041/pat/6/par/E12000002/ati/401/are/E06000049/iid/92313/age/204/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1).
+
+The underlying source of the data is taken from the annual Labour Force Survey.
+
+<br/>
 
 ## Sickness Absence {.tabset .tabset-fade}
 
-### Map
+### Local Authority Map
+
+The map below shows the percentage of working days lost due to sickness absence between 2018 - 2020 for each Local Authority across Cheshire & Merseyside. The darker the colour, the higher the percentage of days lost.
 
 ```{r Emp Sick Prep}
 
@@ -218,9 +453,10 @@ map_ind_data_sick<-emp_sick%>%
 ## Joining LA Shape Data and Fingertips Data
 lads_data_nw<-merge(lads_nw, map_ind_data_sick, by.x = "lad17cd",  "AreaCode")
 lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
 
 ## Creating Palettes
-pal_con<-colorNumeric("Greens", lads_data_nw$Value)
+pal_con<-colorNumeric("Greens", lads_data_cm$Value)
 
 ```
 
@@ -229,7 +465,7 @@ pal_con<-colorNumeric("Greens", lads_data_nw$Value)
 lat<-53.3
 lng<--2.5
 
-lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
 
 leaflet(lads_data_cm)%>%
   addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
@@ -240,11 +476,27 @@ leaflet(lads_data_cm)%>%
   setView(lng, lat, zoom = 9)
 
 ```
+
+<br/>
+
 ### Metadata
 
-## Gap in Employment Rate {.tabet .tabset-fade}
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/public-health-outcomes-framework/data#page/3/gid/1000041/pat/6/par/E12000002/ati/401/are/E06000049/iid/90287/age/164/sex/4/cat/-1/ctp/-1/yrr/3/cid/4/tbm/1/page-options/car-do-0).
+
+The underlying source of the data is taken from the annual Labour Force Survey and the ONS. Please note that for the coronavirus pandemic has impacted the underlying 2020 data in the following way:
+
+-   Increased sickness absence due the virus
+-   Decreased sickness absence due to furloughing, social distancing, shielding and increased homeworking which has reduced other causes of absence. Some of the decrease seen in 2020 will be because there were fewer people in work due to furlough.
+-   Survey weighting methodology for the sample has changed slightly due to face-to-face interviewing being suspended.
+
+<br/>
+
+## Gap in Employment Rate {.tabset .tabset-fade}
 
 ### Map
+
+The map below shows the gap in the employment rate for people with a physical or mental health condition and the overall employment rate for each Local Authority across Cheshire & Merseyside in 2020/21. The darker the colour, the wider the gap in employment rates.
+
 ```{r Emp Gap Prep}
 
 ## Prep Sickness data
@@ -258,9 +510,10 @@ map_ind_data_gap<-emp_gap%>%
 ## Joining LA Shape Data and Fingertips Data
 lads_data_nw<-merge(lads_nw, map_ind_data_gap, by.x = "lad17cd",  "AreaCode")
 lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
 
 ## Creating Palettes
-pal_con<-colorNumeric("Greens", lads_data_nw$Value)
+pal_con<-colorNumeric("Greens", lads_data_cm$Value)
 
 ```
 
@@ -269,7 +522,7 @@ pal_con<-colorNumeric("Greens", lads_data_nw$Value)
 lat<-53.3
 lng<--2.5
 
-lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
 
 leaflet(lads_data_cm)%>%
   addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
@@ -281,25 +534,506 @@ leaflet(lads_data_cm)%>%
 
 ```
 
+<br/>
 
+### Metadata
+
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/public-health-outcomes-framework/data#page/6/gid/1000041/pat/6/par/E12000002/ati/401/are/E06000049/iid/90282/age/204/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
+
+Numerator for employment rate of people with a long term condition: Estimated (weighted) number of people with any physical or mental health condition or illness lasting or expected to last 12 months or more (based on responses in the Annual Population Survey) and who are in employment either as an employee, self employed, in government employment and training programmes or an unpaid family worker (the ILO definition of basic economic activity) and are of working age (aged 16 to 64).
+
+<br/>
 
 # Education Status
 
 ## Level 8 Attaintment {.tabset .tabset-fade}
 
+### Local Authority Map
+
+The map below shows the Average Attaintment 8 score for all pupils at the end of Key Stage 4. The mean score for each Local Authority in Cheshire & Merseyside is shown with darker colours representing higher average scores. The score is shown on the map for each Local Authority alongside its corresponding 95% confidence interval.
+
+```{r Edu A8 Prep}
+
+## Prep Sickness data
+edu_att<-fingertips_data(IndicatorID = 93378, AreaTypeID = 401)
+map_ind_data_edu<-edu_att%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2020/21",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_edu, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+## Creating Palettes
+pal_con<-colorNumeric("Reds", lads_data_cm$Value)
+
+```
+
+```{r Edu A8 Map}
+
+lat<-53.3
+lng<--2.5
+
+
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Mean Score",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+<br/>
+
+### Metadata
+
+The data to produce this map was sourced from the Fingertips Wider Determinants of Health profile produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/wider-determinants/data#page/3/gid/1938133071/pat/6/par/E12000002/ati/401/are/E07000026/iid/93378/age/175/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
+
+<br/>
 
 ## Pupil Absence {.tabset .tabset-fade}
 
+### Local Authority Map
+
+The map below shows the percentage of half days missed by aged between 5 - 15 years due to overall absence (authorised and unauthorised) for each Local Authority within Cheshire & Merseyside during 2020/21. The darker the colour the higher the percentage of half days missed. The map shows the percentage missed for each Local Authority alongside the corresponding 95% confidence intervals.
+
+```{r Edu Abs Prep}
+
+## Prep Sickness data
+edu_att<-fingertips_data(IndicatorID = 10301, AreaTypeID = 401)
+map_ind_data_edu<-edu_att%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2020/21",
+         Sex == "Persons")
 
 
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_edu, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+## Creating Palettes
+pal_con<-colorNumeric("Reds", lads_data_cm$Value)
+
+```
+
+```{r Edu Abs Map}
+
+lat<-53.3
+lng<--2.5
+
+
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Percentage of half days",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+<br/>
+
+### Metadata
+
+The data to produce this map was sourced from the Fingertips Wider Determinants of Health profile produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/profile/wider-determinants/data#page/3/gid/1938133071/pat/6/par/E12000002/ati/401/are/E07000026/iid/10301/age/193/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
+
+The underlying source of the data is from Pupil absence statistics published by the **Department for Education**.
+
+<br/>
 
 # Car Ownership
 
+**Awaiting Census Data Publication 29th November**
+
+## Car and Van Ownership - Census 2021 {.tabset .tabset-fade}
+
+### Local Authority
+
+<br/>
+
+### Metadata
+
+<br/>
+
+
 # Co-morbidity Prevalance
+
+## Condition Prevalence {.tabset .tabset-fade}
+The maps below show the prevalence of different conditions as recorded on GP systems for each CCG across Cheshire & Merseyside. The darker the colour the higher the prevalence of the condition across that CCG footprint.
+
+### Atrial Fibrillation
+
+```{r Prev AF Prep}
+
+ccg_nw<-merge(ccg, NW_CCG, by.x = "CCG21CD", "Area Code")
+ccg_cm<-subset(ccg_nw, System == "Cheshire & Merseyside")
+
+## Load Co-Morbidity Data
+
+atrial_fib<-read.xlsx("https://files.digital.nhs.uk/D9/13B97D/qof-2122-sicbl-ach-prev-pca.xlsx", 
+                sheet = 2, startRow = 12)
+atrial_fib<-atrial_fib%>%
+  select(1:3, 9:11)%>%
+  filter(Sub.ICB.Loc.ONS.code %in% c("E38000015","E38000217","E38000091","E38000143","E38000014","E38000101",
+                               "E38000080","E38000068","E38000050","E38000205","E38000135","E38000227",
+                               "E38000024","E38000172","E38000182","E38000161","E38000194","E38000174",
+                               "E38000200","E38000034","E38000016","E38000208","E38000228","E38000233",
+                               "E38000226","E38000170","E38000187")) 
+AF<-rename(atrial_fib, Prevalence = "Prevalence.(%)")
+
+## Joining Shape Data and QOF Data
+ccg_data_cm<-merge(ccg_cm, AF, by.x = "CCG21CD",  "Sub.ICB.Loc.ONS.code")
+
+
+## Creating Palettes
+
+pal_con<-colorNumeric("Blues", ccg_data_cm$`Prevalence`)
+
+```
+
+```{r Prev AF }
+
+lat<-53.3
+lng<--2.5
+
+leaflet(ccg_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Prevalence),
+              label = paste0(ccg_data_cm$CCG21NM,": ", round(ccg_data_cm$Prevalence, 2), "%"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = ccg_data_cm$Prevalence, pal = pal_con, title = "Prevalence of Atrial Fibrillation (%)",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+<br/>
+
+### Coronary Heart Disease
+
+<br/>
+
+### Heart Failure
+
+<br/>
+
+### Hypertension
+
+<br/>
+
+### Peripheral Arterial Disease
+
+<br/>
+
+### Stroke & TIA
+
+<br/>
+
+### Obesity
+
+<br/>
+
+### Depression
+
+<br/>
+
+### Metadata
+
+The data to produce these maps was sourced from QOF 2021/22 publication by **NHS Digital**. The data can be accessed [here](https://digital.nhs.uk/data-and-information/publications/statistical/quality-and-outcomes-framework-achievement-prevalence-and-exceptions-data/2021-22).
+
 
 # Drug Use
 
+## Opiate or Crack Cocaine Users not in Treatment {.tabset .tabset-fade}
+
+### Local Authority Map
+
+The map below shows the percentage of Opiate and/or Crack Cocaine users who were not in contact with contact with drug treatment services for an OCU problem in 2020/21. Figures are shown for each Local Authority alongside their respective 95% confidence intervals. Darker colours indicate a higher percentage of users not in treatment.
+
+```{r Drg Opi Prep}
+
+## Prep Sickness data
+drg_opi<-fingertips_data(IndicatorID = 93517, AreaTypeID = 402)
+map_ind_data_drg<-drg_opi%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2020/21",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_drg, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+## Creating Palettes
+pal_con<-colorNumeric("Purples", lads_data_cm$Value)
+
+```
+
+```{r Drg Opi Map}
+
+lat<-53.3
+lng<--2.5
+
+
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Percentage of Users",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+<br/>
+
+### Metadata
+
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/opiates#page/3/gid/1/pat/6/par/E12000002/ati/402/are/E06000008/iid/93517/age/182/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
+
+The numerator estimates are taken from the **National Drug Treatment Monitoring System** and the estimates of the underlying denominator are taken from estimates of OCU Use in England, produced by **Liverpool John Moores University (LJMU)**.
+
+<br/>
+
+## Deaths from Drug Misuse {.tabset .tabset-fade}
+
+### Local Authority Map
+
+The map below shows the directly standardised mortality rate per 100,000 population due to drug misuse for the period 2018 - 2020. Deaths where the underlying cause of death has been coded to particular categories of mental and behavioural disorders due to psychoactive substance use (excluding alcohol, tobacco and volatile solvents) registered in the calendar year for all ages. The darker the colour, the higher the mortality rate. Rates are shown on the map alongside the corresponding 95% confidence intervals.
+
+```{r Drg Mort Prep}
+
+## Prep Sickness data
+drg_mrt<-fingertips_data(IndicatorID = 	92432, AreaTypeID = 401)
+map_ind_data_drg<-drg_mrt%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2018 - 20",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_drg, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+## Creating Palettes
+pal_con<-colorNumeric("Purples", lads_data_cm$Value)
+
+```
+
+```{r Drg Mort Map}
+
+lat<-53.3
+lng<--2.5
+
+
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "DSR per 100,000",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+<br/>
+
+### Metadata
+
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/drug%20death#page/3/gid/1/pat/6/par/E12000002/ati/401/are/E07000026/iid/92432/age/1/sex/4/cat/-1/ctp/-1/yrr/3/cid/4/tbm/1/page-options/car-do-0).
+
+Deaths where the underlying cause of death has been coded to the following categories of mental and behavioural disorders due to psychoactive substance use (excluding alcohol, tobacco and volatile solvents):
+
+1.  opioids (F11)
+2.  cannabinoids (F12)
+3.  sedatives or hypnotics (F13)
+4.  cocaine (F14)
+5.  other stimulants, including caffeine (F15)
+6.  hallucinogens (F16) and
+7.  multiple drug use and use of other psychoactive substances (F19)
+
+**AND**
+
+Deaths coded to the following categories and where a drug controlled under the Misuse of Drugs Act 1971 was mentioned on the death record:
+
+1.  Accidental poisoning by drugs, medicaments and biological substances (X40--X44)
+2.  Intentional self-poisoning by drugs, medicaments and biological substances (X60--X64)
+3.  Poisoning by drugs, medicaments and biological substances, undetermined intent (Y10--Y14)
+4.  Assault by drugs, medicaments and biological substances (X85) and
+5.  Mental and behavioural disorders due to use of volatile solvents (F18)
+
+<br/>
+
 # Alcohol Use
+
+## Alcohol Specific Admissions {.tabset .tabset-fade}
+
+### Local Authority Map
+
+The map below shows the Directly Standardised Rate per 100,000 of alcohol specific admissions to hospital during 2020/21. Alcohol specific admissions relate to an admission where the primary diagnosis or any secondary diagnosis are an alcohol specific (wholly attributable) condition. The darker the colour, the higher the rate of admissions. Admission rates are shown alongside the associated 95% Confidence Intervals.
+
+```{r Alc Adm Prep}
+
+## Prep Sickness data
+alc_adm<-fingertips_data(IndicatorID = 92906, AreaTypeID = 401)
+map_ind_data_alc<-alc_adm%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2020/21",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_alc, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_cm$Value)
+
+```
+
+```{r Alc Adm Map}
+
+lat<-53.3
+lng<--2.5
+
+
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "DSR per 100,000",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+<br/>
+
+### Metadata
+
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/alcohol#page/3/gid/1/pat/6/par/E12000002/ati/401/are/E07000026/iid/92906/age/1/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
+
+Admissions data is sourced from Hospital Episode Statistics (HES) via **NHS Digital** and population estimates via **ONS**.
+
+<br/>
+
+## Alcohol Licensed Premises {.tabset .tabset-fade}
+
+### Local Authority Map
+
+The map below shows the number of premises per square kilometre that were licensed to sell alcohol during 2017/18 across Cheshire & Merseyside. The darker the colour, the higher the number of premises. Figures on the map correspond to the rate with the associated 95% confidence intervals.
+
+```{r Alc Prem Prep}
+
+## Prep Sickness data
+alc_prem<-fingertips_data(IndicatorID = 92772, AreaTypeID = 401)
+map_ind_data_alc<-alc_prem%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2017/18",
+         Sex == "Not applicable")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_alc, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_cm$Value)
+
+```
+
+```{r Alc Prem Map}
+
+lat<-53.3
+lng<--2.5
+
+
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "Premises per square KM",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+<br/>
+
+### Metadata
+
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/alcohol#page/3/gid/1/pat/6/par/E12000002/ati/401/are/E07000026/iid/92772/age/-1/sex/-1/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
+
+The original source of the data is **Public Health England: Risk Factors Intelligence (RFI) team** (from published data from the Home Office).
+
+<br/>
+
+## Alcohol Specific Mortality {.tabset .tabset-fade}
+
+### Local Authority Map
+
+The map below shows the directly standardised mortality rate per 100,000 population due to alcohol specific causes for the period 2017 - 2019. Alcohol specific causes are deaths which have been wholly caused by alcohol consumption, registered in the calendar year for all ages. The darker the colour, the higher the mortality rate. Rates are shown on the map alongside the corresponding 95% confidence intervals.
+
+```{r Alc Mort Prep}
+
+## Prep Sickness data
+alc_mort<-fingertips_data(IndicatorID = 91380, AreaTypeID = 401)
+map_ind_data_alc<-alc_mort%>%
+  filter(ParentName == "North West region",
+         Timeperiod == "2017 - 19",
+         Sex == "Persons")
+
+
+## Joining LA Shape Data and Fingertips Data
+lads_data_nw<-merge(lads_nw, map_ind_data_alc, by.x = "lad17cd",  "AreaCode")
+lads_data_nw<-subset(lads_data_nw, Region == "North West")
+lads_data_cm<-subset(lads_data_nw, System == "Cheshire & Merseyside")
+
+## Creating Palettes
+pal_con<-colorNumeric("Greens", lads_data_cm$Value)
+
+```
+
+```{r Alc Mort Map}
+
+lat<-53.3
+lng<--2.5
+
+
+
+leaflet(lads_data_cm)%>%
+  addPolygons(stroke = TRUE, weight = 1, opacity = 1, fillOpacity = 0.6,
+              color = "black", fillColor = ~pal_con(Value),
+              label = paste0(lads_data_cm$lad17nm,": ", round(lads_data_cm$Value,1)," - (", round(lads_data_cm$LowerCI95.0limit,1)," - ",round(lads_data_cm$UpperCI95.0limit,1), ")"))%>%
+  addProviderTiles(providers$CartoDB.Voyager)%>%
+  addLegend(values = lads_data_cm$Value, pal = pal_con, title = "DSR per 100,000",position = "topright")%>%
+  setView(lng, lat, zoom = 9)
+
+```
+
+<br/>
+
+### Metadata
+
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/alcohol%20mortality#page/3/gid/1938132832/pat/6/par/E12000002/ati/401/are/E07000026/iid/91380/age/1/sex/4/cat/-1/ctp/-1/yrr/3/cid/4/tbm/1/page-options/car-do-0).
+
+<br/>
 
 # Smoking
 
@@ -328,11 +1062,12 @@ ccg_data_nw<-merge(ccg_nw, map_ind_data, by.x = "CCG21CD", "AreaCode")
 ccg_data_nw<-subset(ccg_data_nw, Region == "North West")
 
 ## Create palette
-pal_con_asmk<-colorNumeric("Oranges", ccg_data_nw$Value)
+pal_con_asmk<-colorNumeric("Reds", ccg_data_nw$Value)
 
 ```
 
 ### CCG Map
+The map below shows percentage of active smokers as identified on the GP Survey in 2021. The percentage of over 16s who are active smokers are shown on the map alongside the corresponding 95% confidence intervals. The darker the colour the higher the percentage of the population actively smoke.
 
 ```{r Active Smoke Map}
 
@@ -354,3 +1089,9 @@ leaflet(ccg_data_cm)%>%
 ```
 
 ### Metadata
+
+The data to produce this map was sourced from the Fingertips Public Health Profiles produced by the **Office for Health Improvement & Disparities**. The tool can be accessed [here](https://fingertips.phe.org.uk/search/smoking#page/3/gid/1/pat/220/par/E54000008/ati/167/iid/90452/age/164/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1/page-options/car-do-0).
+
+<br/>
+
+The data for this measure originates form the **GP Survey** Question 59. People were asked: "Which of the following best describes your smoking habits?". The indicator value is the percentage of people who answered this question with "Occasional smoker" or "Regular smoker" from all responses to this question.
